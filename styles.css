@@ -1,0 +1,367 @@
+/* ============ FUDLEVI — Baby Cupsey-inspired cartoon memecoin style ============ */
+:root {
+  --navy-950: #0a1526;
+  --navy-900: #0d1b2e;
+  --navy-800: #13253f;
+  --navy-700: #1b3355;
+  --gold: #f5c542;
+  --gold-dark: #d9a520;
+  --white: #f4f7fb;
+  --muted: #9fb2cc;
+  --border: #060d18;
+  --shadow: 0 6px 0 var(--border);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: "Fredoka", sans-serif;
+  background: var(--navy-900);
+  color: var(--white);
+  overflow-x: hidden;
+}
+
+a { color: var(--gold); }
+
+/* ============ NAV ============ */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: rgba(10, 21, 38, 0.9);
+  backdrop-filter: blur(8px);
+  border-bottom: 3px solid var(--border);
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--white);
+  text-decoration: none;
+}
+
+.nav-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.nav-links a:not(.btn) {
+  color: var(--white);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.nav-links a:not(.btn):hover { color: var(--gold); }
+
+/* ============ BUTTONS ============ */
+.btn {
+  display: inline-block;
+  padding: 14px 28px;
+  border-radius: 999px;
+  font-family: "Fredoka", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 3px solid var(--border);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.btn:hover { transform: translateY(-3px); box-shadow: 0 9px 0 var(--border); }
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--border); }
+
+.btn-gold { background: var(--gold); color: #1a1608; }
+.btn-gold:hover { background: #ffd45e; }
+.btn-navy { background: var(--navy-700); color: var(--white); }
+.btn-navy:hover { background: #244270; }
+.btn-sm { padding: 9px 18px; font-size: 0.95rem; box-shadow: 0 4px 0 var(--border); }
+
+/* ============ HERO ============ */
+.hero {
+  position: relative;
+  text-align: center;
+  padding: 72px 20px 80px;
+  overflow: hidden;
+}
+
+.hero-glow {
+  position: absolute;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(245, 197, 66, 0.18) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.hero-logo {
+  width: 260px;
+  max-width: 65vw;
+  border-radius: 50%;
+  border: 6px solid var(--gold);
+  box-shadow: 0 8px 0 var(--border), 0 0 60px rgba(245, 197, 66, 0.35);
+}
+
+.float { animation: float 3.5s ease-in-out infinite; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+
+.hero-title {
+  margin-top: 28px;
+  font-size: clamp(3rem, 10vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 4px 4px 0 var(--border);
+}
+
+.hero-ticker {
+  font-size: clamp(1.3rem, 4vw, 1.8rem);
+  font-weight: 600;
+  color: var(--gold);
+  margin-top: 4px;
+}
+
+.hero-tagline {
+  font-size: clamp(1.05rem, 3vw, 1.35rem);
+  color: var(--muted);
+  margin-top: 14px;
+}
+
+/* Contract address bar */
+.ca-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 30px;
+  padding: 12px 18px;
+  background: var(--navy-800);
+  border: 3px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  max-width: 92vw;
+}
+
+.ca-label { font-weight: 700; color: var(--gold); }
+
+.ca-bar code {
+  font-size: 0.95rem;
+  color: var(--white);
+  word-break: break-all;
+}
+
+.hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 34px;
+}
+
+/* ============ MARQUEE ============ */
+.marquee {
+  background: var(--gold);
+  border-top: 4px solid var(--border);
+  border-bottom: 4px solid var(--border);
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 12px 0;
+}
+
+.marquee-track {
+  display: inline-flex;
+  animation: scroll 25s linear infinite;
+}
+
+.marquee-track span {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a1608;
+}
+
+@keyframes scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ============ SECTIONS ============ */
+.section { padding: 90px 20px; }
+.section-alt { background: var(--navy-950); }
+
+.section-inner { max-width: 1080px; margin: 0 auto; }
+
+.section-title {
+  font-size: clamp(2.2rem, 6vw, 3.2rem);
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 48px;
+  text-shadow: 3px 3px 0 var(--border);
+}
+
+.gold { color: var(--gold); }
+
+/* About */
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.about-img {
+  width: 100%;
+  border-radius: 24px;
+  border: 5px solid var(--gold);
+  box-shadow: var(--shadow);
+}
+
+.tilt { transform: rotate(-3deg); transition: transform 0.25s; }
+.tilt:hover { transform: rotate(2deg) scale(1.04); }
+
+.about-text p {
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.about-text strong, .about-text em { color: var(--white); }
+
+.about-punch {
+  font-size: 1.5rem !important;
+  font-weight: 700;
+  color: var(--gold) !important;
+}
+
+/* Cards (How to Buy + Tokenomics) */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 24px;
+}
+
+.card {
+  background: var(--navy-800);
+  border: 3px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 28px 24px;
+  transition: transform 0.15s;
+}
+
+.card:hover { transform: translateY(-6px); }
+
+.card h3 { font-size: 1.25rem; margin-bottom: 10px; color: var(--gold); }
+
+.card p { color: var(--muted); line-height: 1.6; }
+
+.card-num {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gold);
+  color: #1a1608;
+  font-size: 1.3rem;
+  font-weight: 700;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.stat { text-align: center; }
+
+.stat-value {
+  font-size: 2.6rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 8px;
+  text-shadow: 3px 3px 0 var(--border);
+}
+
+/* Scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* ============ FOOTER ============ */
+.footer {
+  text-align: center;
+  padding: 60px 20px 40px;
+  background: var(--navy-950);
+  border-top: 4px solid var(--border);
+}
+
+.footer-logo {
+  width: 80px;
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+}
+
+.footer-brand {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-top: 12px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.footer-links a {
+  color: var(--white);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer-links a:hover { color: var(--gold); }
+
+.disclaimer {
+  max-width: 620px;
+  margin: 0 auto 16px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.copyright { font-size: 0.85rem; color: var(--muted); }
+
+/* ============ MOBILE ============ */
+@media (max-width: 720px) {
+  .nav-links a:not(.btn) { display: none; }
+  .about-grid { grid-template-columns: 1fr; }
+  .about-img { max-width: 320px; margin: 0 auto; display: block; }
+}
