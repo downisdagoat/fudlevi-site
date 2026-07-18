@@ -4,6 +4,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 app.use(express.json());
@@ -13,6 +14,29 @@ app.use(express.static(path.join(__dirname, "public")));
 const PORT = process.env.PORT || 3000;
 const MINT = process.env.MINT_ADDRESS || "2KQAKeDZfbmRXznrwB3bthEuasgjpNpjrTv8zgAYpump";
 const HELIUS_KEY = process.env.HELIUS_API_KEY || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+
+// ---------- admin auth ----------
+// Protects snapshot/exclusion/export/bundle endpoints. Password lives in Railway (ADMIN_PASSWORD), never in code.
+function keyMatches(provided) {
+  if (!ADMIN_PASSWORD) return false;
+  const a = Buffer.from(String(provided || ""));
+  const b = Buffer.from(ADMIN_PASSWORD);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+function requireAuth(req, res, next) {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({
+      error: "Admin locked but no password set. Add ADMIN_PASSWORD in Railway variables to enable access.",
+    });
+  }
+  const key = req.get("x-admin-key") || req.query.key || "";
+  if (!keyMatches(key)) {
+    return res.status(401).json({ error: "Unauthorized — wrong or missing admin password." });
+  }
+  next();
+}
 const RPC_URL =
   process.env.RPC_URL ||
   (HELIUS_KEY
@@ -205,7 +229,7 @@ function snapshotFiles() {
     .reverse();
 }
 
-app.post("/api/snapshot", async (_req, res) => {
+app.post("/api/snapshot", requireAuth, async (_req, res) => {
   try {
     const t0 = Date.now();
     const { holders, decimals } = await scanHolders();
@@ -228,7 +252,7 @@ app.post("/api/snapshot", async (_req, res) => {
   }
 });
 
-app.get("/api/snapshots", (_req, res) => {
+app.get("/api/snapshots", requireAuth, (_req, res) => {
   const out = snapshotFiles().map((f) => {
     const j = JSON.parse(fs.readFileSync(path.join(DATA_DIR, f)));
     return { id: j.id, takenAt: j.takenAt, holderCount: j.holderCount };
@@ -242,14 +266,14 @@ function loadSnapshot(id) {
   return JSON.parse(fs.readFileSync(file));
 }
 
-app.get("/api/snapshots/:id", (req, res) => {
+app.get("/api/snapshots/:id", requireAuth, (req, res) => {
   const snap = loadSnapshot(req.params.id);
   if (!snap) return res.status(404).json({ error: "Snapshot not found" });
   res.json(snap);
 });
 
 // CSV export. Min-balance filter: ?min=1000. Blocklist is applied by default; ?raw=1 keeps everyone.
-app.get("/api/snapshots/:id/csv", (req, res) => {
+app.get("/api/snapshots/:id/csv", requireAuth, (req, res) => {
   const snap = loadSnapshot(req.params.id);
   if (!snap) return res.status(404).json({ error: "Snapshot not found" });
   const min = Number(req.query.min || 0);
@@ -271,7 +295,7 @@ app.get("/api/snapshots/:id/csv", (req, res) => {
 });
 
 // Compare a snapshot against holders now: still-holding = airdrop eligible ("held before AND held through")
-app.get("/api/snapshots/:id/compare", async (req, res) => {
+app.get("/api/snapshots/:id/compare", requireAuth, async (req, res) => {
   try {
     const snap = loadSnapshot(req.params.id);
     if (!snap) return res.status(404).json({ error: "Snapshot not found" });
@@ -307,19 +331,19 @@ app.get("/api/snapshots/:id/compare", async (req, res) => {
 });
 
 // ---------- exclusion blocklist API ----------
-app.get("/api/excluded", (_req, res) => {
+app.get("/api/excluded", requireAuth, (_req, res) => {
   res.json({ wallets: loadExcluded() });
 });
 
 // Replace the whole list. Body: { wallets: [...] }
-app.post("/api/excluded", (req, res) => {
+app.post("/api/excluded", requireAuth, (req, res) => {
   const wallets = Array.isArray(req.body?.wallets) ? req.body.wallets : [];
   const clean = saveExcluded(wallets);
   res.json({ wallets: clean, count: clean.length });
 });
 
 // Add wallets to the existing list (used by the bundle scanner). Body: { wallets: [...] }
-app.post("/api/excluded/add", (req, res) => {
+app.post("/api/excluded/add", requireAuth, (req, res) => {
   const add = Array.isArray(req.body?.wallets) ? req.body.wallets : [];
   const clean = saveExcluded([...loadExcluded(), ...add]);
   res.json({ wallets: clean, count: clean.length, added: add.length });
@@ -387,7 +411,7 @@ async function bundleScan() {
   };
 }
 
-app.get("/api/bundle-scan", async (_req, res) => {
+app.get("/api/bundle-scan", requireAuth, async (_req, res) => {
   try {
     if (!HELIUS_KEY) {
       return res.status(400).json({
@@ -400,8 +424,21 @@ app.get("/api/bundle-scan", async (_req, res) => {
   }
 });
 
+// Verify an admin password (used by the login box before storing it client-side).
+app.post("/api/auth", (req, res) => {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).json({ ok: false, error: "No ADMIN_PASSWORD set in Railway variables yet." });
+  }
+  res.json({ ok: keyMatches(req.body?.password) });
+});
+
 app.get("/api/config", (_req, res) => {
-  res.json({ mint: MINT, rpcConfigured: RPC_URL !== "https://api.mainnet-beta.solana.com", helius: !!HELIUS_KEY });
+  res.json({
+    mint: MINT,
+    rpcConfigured: RPC_URL !== "https://api.mainnet-beta.solana.com",
+    helius: !!HELIUS_KEY,
+    adminConfigured: !!ADMIN_PASSWORD,
+  });
 });
 
 app.listen(PORT, () => {

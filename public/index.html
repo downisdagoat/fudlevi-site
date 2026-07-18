@@ -141,6 +141,21 @@
     text-align:center;color:var(--milk-dim);font-size:.75rem;padding:26px;
     border-top:1px solid var(--line);font-family:'IBM Plex Mono',monospace;
   }
+  #loginOverlay{
+    display:none;position:fixed;inset:0;z-index:50;
+    background:rgba(6,11,16,.78);backdrop-filter:blur(4px);
+    align-items:center;justify-content:center;padding:20px;
+  }
+  #loginOverlay.show{display:flex}
+  .loginbox{
+    background:var(--stall);border:1px solid var(--line);border-radius:16px;
+    padding:26px;width:100%;max-width:380px;
+  }
+  .locked-note{
+    background:var(--stall);border:1px dashed var(--line);border-radius:12px;
+    padding:18px;color:var(--milk-dim);font-size:.85rem;text-align:center;
+  }
+  .locked-note button{margin-top:12px}
   @media (prefers-reduced-motion: reduce){
     *{transition:none!important}
   }
@@ -156,8 +171,25 @@
     <div class="cowmark" aria-hidden="true"></div>
     <h1>MOOLANA <span>HQ</span></h1>
   </div>
-  <div class="ca" id="ca" role="button" tabindex="0" title="Copy contract address">Loading CA…</div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="ca" id="ca" role="button" tabindex="0" title="Copy contract address">Loading CA…</div>
+    <button class="ghost" id="adminBtn" style="padding:8px 14px;font-size:.8rem">🔒 Admin</button>
+  </div>
 </header>
+
+<div id="loginOverlay" aria-hidden="true">
+  <div class="loginbox">
+    <h3 style="font-family:'Unbounded',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:6px">🔒 Admin login</h3>
+    <p style="color:var(--milk-dim);font-size:.82rem;margin-bottom:16px">Enter your admin password to manage snapshots and the blocklist.</p>
+    <input type="password" id="adminPass" placeholder="Admin password" autocomplete="current-password"
+      style="width:100%;background:var(--night);border:1px solid var(--line);color:var(--milk);border-radius:10px;padding:12px 14px;font-family:'IBM Plex Mono',monospace;margin-bottom:14px" />
+    <div class="controls" style="margin-bottom:0">
+      <button id="loginSubmit">Unlock</button>
+      <button class="ghost" id="loginCancel">Cancel</button>
+    </div>
+    <div class="status" id="loginStatus"></div>
+  </div>
+</div>
 
 <main>
   <section id="tokenomics">
@@ -247,12 +279,96 @@ const fmtNum = (n) => n == null ? "—" : n >= 1e9 ? (n/1e9).toFixed(2)+"B" : n 
 const short = (a) => a.slice(0,4) + "…" + a.slice(-4);
 
 let MINT = "";
+let ADMIN_KEY = localStorage.getItem("moolana_admin_key") || "";
+let unlocked = false;
+let adminConfigured = true;
+
+function authHeaders(extra){
+  return Object.assign({}, extra || {}, ADMIN_KEY ? { "x-admin-key": ADMIN_KEY } : {});
+}
+function ensureUnlocked(){
+  if(unlocked) return true;
+  openLogin();
+  return false;
+}
+function openLogin(){
+  $("loginStatus").textContent = "";
+  $("adminPass").value = "";
+  $("loginOverlay").classList.add("show");
+  setTimeout(() => $("adminPass").focus(), 50);
+}
+function closeLogin(){ $("loginOverlay").classList.remove("show"); }
+
+function setUnlocked(v){
+  unlocked = v;
+  $("adminBtn").textContent = v ? "🔓 Admin · log out" : "🔒 Admin";
+  if(v){ listSnaps(); loadBlocklist(); }
+  else { renderLocked(); }
+}
+function renderLocked(){
+  const msg = adminConfigured
+    ? `<div class="locked-note">🔒 Admin locked. Unlock to view and manage this.<br><button class="ghost" onclick="openLogin()">Unlock admin</button></div>`
+    : `<div class="locked-note">⚠️ No admin password set yet. Add <b>ADMIN_PASSWORD</b> in your Railway variables, then reload.</div>`;
+  $("snapList").innerHTML = msg;
+  $("bundleResults").innerHTML = "";
+  $("blocklist").value = "";
+  $("blocklist").placeholder = adminConfigured ? "Unlock admin to view / edit the blocklist" : "Set ADMIN_PASSWORD in Railway first";
+  updateBlockCount(0);
+}
 
 async function loadConfig(){
   const c = await (await fetch("/api/config")).json();
   MINT = c.mint;
+  adminConfigured = c.adminConfigured;
   $("ca").textContent = "CA: " + MINT;
 }
+
+async function initAdmin(){
+  if(!adminConfigured){ setUnlocked(false); return; }
+  if(ADMIN_KEY){
+    // validate the stored key silently
+    try{
+      const d = await (await fetch("/api/auth", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ password: ADMIN_KEY })
+      })).json();
+      if(d.ok){ setUnlocked(true); return; }
+    }catch{}
+    ADMIN_KEY = ""; localStorage.removeItem("moolana_admin_key");
+  }
+  setUnlocked(false);
+}
+
+$("adminBtn").addEventListener("click", () => {
+  if(unlocked){
+    ADMIN_KEY = ""; localStorage.removeItem("moolana_admin_key");
+    setUnlocked(false);
+  } else openLogin();
+});
+$("loginCancel").addEventListener("click", closeLogin);
+$("loginOverlay").addEventListener("click", (e) => { if(e.target === $("loginOverlay")) closeLogin(); });
+$("adminPass").addEventListener("keydown", (e) => { if(e.key==="Enter") $("loginSubmit").click(); });
+$("loginSubmit").addEventListener("click", async () => {
+  const pw = $("adminPass").value;
+  if(!pw){ $("loginStatus").className="status err"; $("loginStatus").textContent="Enter your password."; return; }
+  $("loginStatus").className="status"; $("loginStatus").textContent="Checking…";
+  try{
+    const d = await (await fetch("/api/auth", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ password: pw })
+    })).json();
+    if(d.ok){
+      ADMIN_KEY = pw; localStorage.setItem("moolana_admin_key", pw);
+      closeLogin(); setUnlocked(true);
+    } else {
+      $("loginStatus").className="status err";
+      $("loginStatus").textContent = d.error || "Wrong password.";
+    }
+  }catch(e){
+    $("loginStatus").className="status err";
+    $("loginStatus").textContent = "Login failed: " + e.message;
+  }
+});
 $("ca").addEventListener("click", () => {
   navigator.clipboard.writeText(MINT);
   $("ca").textContent = "Copied ✓";
@@ -297,7 +413,10 @@ async function loadTokenomics(){
 }
 
 async function listSnaps(){
-  const snaps = await (await fetch("/api/snapshots")).json();
+  if(!unlocked){ renderLocked(); return; }
+  const r = await fetch("/api/snapshots", { headers: authHeaders() });
+  if(r.status === 401 || r.status === 503){ setUnlocked(false); return; }
+  const snaps = await r.json();
   if(!snaps.length){
     $("snapList").innerHTML = `<div class="snap"><span style="color:var(--milk-dim)">No snapshots yet. Take one before you announce anything — the herd rewards receipts.</span></div>`;
     return;
@@ -315,15 +434,35 @@ async function listSnaps(){
     </div>`).join("");
 }
 
-function exportCsv(id){
+async function exportCsv(id){
+  if(!ensureUnlocked()) return;
   const min = Number($("minBal").value || 0);
-  window.location = `/api/snapshots/${id}/csv` + (min ? `?min=${min}` : "");
+  const url = `/api/snapshots/${id}/csv` + (min ? `?min=${min}` : "");
+  try{
+    const r = await fetch(url, { headers: authHeaders() });
+    if(r.status === 401 || r.status === 503){ setUnlocked(false); openLogin(); return; }
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const blob = await r.blob();
+    const cd = r.headers.get("Content-Disposition") || "";
+    const m = cd.match(/filename="(.+?)"/);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : `moolana-${id}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }catch(e){
+    $("snapStatus").className = "status err";
+    $("snapStatus").textContent = "Export failed: " + e.message;
+  }
 }
 
 async function compareSnap(id, btn){
+  if(!ensureUnlocked()) return;
   btn.disabled = true; btn.textContent = "Scanning…";
   try{
-    const d = await (await fetch(`/api/snapshots/${id}/compare`)).json();
+    const r = await fetch(`/api/snapshots/${id}/compare`, { headers: authHeaders() });
+    if(r.status === 401 || r.status === 503){ setUnlocked(false); openLogin(); btn.disabled=false; btn.textContent="Compare vs now"; return; }
+    const d = await r.json();
     if(d.error) throw new Error(d.error);
     $("snapStatus").className = "status ok";
     $("snapStatus").textContent =
@@ -338,12 +477,14 @@ async function compareSnap(id, btn){
 }
 
 $("takeSnap").addEventListener("click", async () => {
+  if(!ensureUnlocked()) return;
   const b = $("takeSnap");
   b.disabled = true; b.textContent = "Scanning the herd…";
   $("snapStatus").className = "status";
   $("snapStatus").textContent = "Scanning every holder wallet — this can take a minute on big holder counts…";
   try{
-    const r = await fetch("/api/snapshot", { method:"POST" });
+    const r = await fetch("/api/snapshot", { method:"POST", headers: authHeaders() });
+    if(r.status === 401 || r.status === 503){ setUnlocked(false); openLogin(); b.disabled=false; b.textContent="📸 Take snapshot now"; return; }
     const d = await r.json();
     if(d.error) throw new Error(d.error);
     $("snapStatus").className = "status ok";
@@ -360,9 +501,13 @@ $("refreshSnaps").addEventListener("click", listSnaps);
 
 // ---------- blocklist / bundle exclusion ----------
 async function loadBlocklist(){
+  if(!unlocked){ return; }
   try{
-    const d = await (await fetch("/api/excluded")).json();
+    const r = await fetch("/api/excluded", { headers: authHeaders() });
+    if(r.status === 401 || r.status === 503){ setUnlocked(false); return; }
+    const d = await r.json();
     $("blocklist").value = (d.wallets || []).join("\n");
+    $("blocklist").placeholder = "One wallet address per line…";
     updateBlockCount(d.wallets ? d.wallets.length : 0);
   }catch{ /* leave empty */ }
 }
@@ -374,13 +519,16 @@ function linesFrom(text){
 }
 
 $("saveBlock").addEventListener("click", async () => {
+  if(!ensureUnlocked()) return;
   const b = $("saveBlock"); b.disabled = true;
   const wallets = linesFrom($("blocklist").value);
   try{
-    const d = await (await fetch("/api/excluded", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+    const r = await fetch("/api/excluded", {
+      method:"POST", headers: authHeaders({"Content-Type":"application/json"}),
       body: JSON.stringify({ wallets })
-    })).json();
+    });
+    if(r.status === 401 || r.status === 503){ setUnlocked(false); openLogin(); b.disabled=false; return; }
+    const d = await r.json();
     $("blocklist").value = (d.wallets || []).join("\n");
     updateBlockCount(d.count);
     $("blockStatus").className = "status ok";
@@ -393,12 +541,15 @@ $("saveBlock").addEventListener("click", async () => {
 });
 
 $("scanBundle").addEventListener("click", async () => {
+  if(!ensureUnlocked()) return;
   const b = $("scanBundle"); b.disabled = true; b.textContent = "Scanning launch…";
   $("blockStatus").className = "status";
   $("blockStatus").textContent = "Reading the token's earliest blocks…";
   $("bundleResults").innerHTML = "";
   try{
-    const d = await (await fetch("/api/bundle-scan")).json();
+    const r = await fetch("/api/bundle-scan", { headers: authHeaders() });
+    if(r.status === 401 || r.status === 503){ setUnlocked(false); openLogin(); b.disabled=false; b.textContent="🔍 Auto-detect launch bundle"; return; }
+    const d = await r.json();
     if(d.error) throw new Error(d.error);
     const cands = d.candidates || [];
     if(!cands.length){
@@ -424,7 +575,7 @@ $("scanBundle").addEventListener("click", async () => {
         const picked = [...document.querySelectorAll(".bcand:checked:not(:disabled)")].map(x => x.value);
         if(!picked.length){ $("blockStatus").textContent = "Nothing new checked to add."; return; }
         const r = await (await fetch("/api/excluded/add", {
-          method:"POST", headers:{"Content-Type":"application/json"},
+          method:"POST", headers: authHeaders({"Content-Type":"application/json"}),
           body: JSON.stringify({ wallets: picked })
         })).json();
         $("blocklist").value = (r.wallets || []).join("\n");
@@ -441,7 +592,7 @@ $("scanBundle").addEventListener("click", async () => {
   b.disabled = false; b.textContent = "🔍 Auto-detect launch bundle";
 });
 
-loadConfig().then(() => { loadTokenomics(); listSnaps(); loadBlocklist(); });
+loadConfig().then(() => { loadTokenomics(); initAdmin(); });
 setInterval(loadTokenomics, 60000);
 </script>
 </body>

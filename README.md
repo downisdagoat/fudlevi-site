@@ -17,6 +17,7 @@ Tokenomics dashboard + holder snapshot tool for **$MOOLANA** airdrops. Built for
 |---|---|---|
 | `MINT_ADDRESS` | no | Defaults to the $MOOLANA CA. Change to track any SPL token. |
 | `HELIUS_API_KEY` | **strongly recommended** | Free tier at helius.dev. Public Solana RPC blocks full-holder scans and rate-limits hard; snapshots basically require this. |
+| `ADMIN_PASSWORD` | **required to use admin** | Password that unlocks snapshots, blocklist, exports, and bundle scan. Until it's set, those actions are locked for everyone (fail-closed). Public tokenomics stay visible. |
 | `RPC_URL` | no | Any custom RPC endpoint. Overrides the Helius/public default. |
 | `DATA_DIR` | no | Where snapshot JSONs are stored. Point at a mounted volume path. |
 
@@ -30,6 +31,9 @@ npm install
 HELIUS_API_KEY=your_key npm start
 # open http://localhost:3000
 ```
+
+## Admin access
+Snapshots, the blocklist, CSV exports, and the bundle scan are locked behind `ADMIN_PASSWORD` — enforced server-side on every endpoint, so it's real access control, not just a hidden button. Live tokenomics and top holders stay public (that's on-chain data anyway). Click **🔒 Admin** on the page, enter the password, and it's remembered on that device until you log out. If `ADMIN_PASSWORD` isn't set, admin actions are denied for everyone (fail-closed). Auth API: `POST /api/auth`.
 
 ## Excluding bundle / dev / LP wallets
 Use the **Exclude bundle wallets** panel to keep snipers and pools out of the airdrop:
