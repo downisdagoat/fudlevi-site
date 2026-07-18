@@ -20,8 +20,35 @@ const RPC_URL =
     : "https://api.mainnet-beta.solana.com");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const EXCLUDED_FILE = path.join(DATA_DIR, "excluded.json");
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// ---------- exclusion blocklist (bundle / dev / LP / CEX wallets) ----------
+// Applied at export/compare time so snapshots stay a raw record and the list can change anytime.
+function loadExcluded() {
+  try {
+    if (!fs.existsSync(EXCLUDED_FILE)) return [];
+    const j = JSON.parse(fs.readFileSync(EXCLUDED_FILE));
+    return Array.isArray(j.wallets) ? j.wallets : [];
+  } catch {
+    return [];
+  }
+}
+function saveExcluded(wallets) {
+  // normalize: trim, drop blanks, dedupe, keep order
+  const seen = new Set();
+  const clean = [];
+  for (const w of wallets) {
+    const a = String(w || "").trim();
+    if (a && !seen.has(a)) { seen.add(a); clean.push(a); }
+  }
+  fs.writeFileSync(EXCLUDED_FILE, JSON.stringify({ wallets: clean }, null, 2));
+  return clean;
+}
+function excludedSet() {
+  return new Set(loadExcluded());
+}
 
 // ---------- rpc helpers ----------
 let rpcId = 0;
@@ -221,18 +248,24 @@ app.get("/api/snapshots/:id", (req, res) => {
   res.json(snap);
 });
 
-// CSV export, with optional min-balance filter: /api/snapshots/:id/csv?min=1000
+// CSV export. Min-balance filter: ?min=1000. Blocklist is applied by default; ?raw=1 keeps everyone.
 app.get("/api/snapshots/:id/csv", (req, res) => {
   const snap = loadSnapshot(req.params.id);
   if (!snap) return res.status(404).json({ error: "Snapshot not found" });
   const min = Number(req.query.min || 0);
-  const rows = snap.holders.filter((h) => h.uiAmount >= min);
+  const applyBlocklist = req.query.raw !== "1";
+  const blocked = applyBlocklist ? excludedSet() : new Set();
+  const rows = snap.holders.filter(
+    (h) => h.uiAmount >= min && !blocked.has(h.owner)
+  );
   const csv =
     "wallet,balance\n" + rows.map((h) => `${h.owner},${h.uiAmount}`).join("\n");
   res.setHeader("Content-Type", "text/csv");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="moolana-${snap.id}${min ? `-min${min}` : ""}.csv"`
+    `attachment; filename="moolana-${snap.id}${min ? `-min${min}` : ""}${
+      applyBlocklist && blocked.size ? "-clean" : ""
+    }.csv"`
   );
   res.send(csv);
 });
@@ -245,23 +278,123 @@ app.get("/api/snapshots/:id/compare", async (req, res) => {
     const { holders, decimals } = await scanHolders();
     const now = holdersToList(holders, decimals);
     const nowMap = new Map(now.map((h) => [h.owner, h.uiAmount]));
+    const blocked = excludedSet();
     const stillHolding = [];
     const exited = [];
+    let excludedFromLoyal = 0;
     for (const h of snap.holders) {
       const cur = nowMap.get(h.owner) || 0;
-      if (cur > 0) stillHolding.push({ owner: h.owner, then: h.uiAmount, now: cur });
-      else exited.push({ owner: h.owner, then: h.uiAmount });
+      if (cur > 0) {
+        if (blocked.has(h.owner)) { excludedFromLoyal++; continue; } // bundle/dev/LP — not a loyalty reward
+        stillHolding.push({ owner: h.owner, then: h.uiAmount, now: cur });
+      } else exited.push({ owner: h.owner, then: h.uiAmount });
     }
-    const newHolders = now.filter((h) => !snap.holders.some((s) => s.owner === h.owner)).length;
+    const snapOwners = new Set(snap.holders.map((s) => s.owner));
+    const newHolders = now.filter((h) => !snapOwners.has(h.owner) && !blocked.has(h.owner)).length;
     res.json({
       snapshotId: snap.id,
       takenAt: snap.takenAt,
       stillHoldingCount: stillHolding.length,
       exitedCount: exited.length,
       newHolderCount: newHolders,
+      excludedFromLoyal,
       stillHolding,
       exited,
     });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// ---------- exclusion blocklist API ----------
+app.get("/api/excluded", (_req, res) => {
+  res.json({ wallets: loadExcluded() });
+});
+
+// Replace the whole list. Body: { wallets: [...] }
+app.post("/api/excluded", (req, res) => {
+  const wallets = Array.isArray(req.body?.wallets) ? req.body.wallets : [];
+  const clean = saveExcluded(wallets);
+  res.json({ wallets: clean, count: clean.length });
+});
+
+// Add wallets to the existing list (used by the bundle scanner). Body: { wallets: [...] }
+app.post("/api/excluded/add", (req, res) => {
+  const add = Array.isArray(req.body?.wallets) ? req.body.wallets : [];
+  const clean = saveExcluded([...loadExcluded(), ...add]);
+  res.json({ wallets: clean, count: clean.length, added: add.length });
+});
+
+// ---------- launch-bundle scanner (best-effort) ----------
+// Finds wallets that received the token in its earliest slots (the classic launch-bundle signature).
+// Bounded work; NOT a full indexer. Cross-check against trench.bot for the authoritative bundle map.
+async function bundleScan() {
+  // Page backwards through the mint's signatures to reach its oldest (creation) activity.
+  let before = undefined;
+  let all = [];
+  let reachedStart = false;
+  for (let i = 0; i < 25; i++) {
+    const sigs = await rpc("getSignaturesForAddress", [MINT, { limit: 1000, before }]);
+    if (!sigs.length) { reachedStart = true; break; }
+    all = all.concat(sigs);
+    before = sigs[sigs.length - 1].signature;
+    if (sigs.length < 1000) { reachedStart = true; break; }
+  }
+  if (!all.length) return { candidates: [], reachedStart, note: "No transactions found for this mint." };
+
+  const minSlot = Math.min(...all.map((s) => s.slot));
+  const WINDOW = 2; // slots after creation to treat as "launch" (~1s)
+  const launchSigs = all
+    .filter((s) => s.slot <= minSlot + WINDOW && !s.err)
+    .sort((a, b) => a.slot - b.slot)
+    .map((s) => s.signature)
+    .slice(0, 80); // cap getTransaction calls
+
+  const owners = new Map(); // owner -> earliest slot seen receiving the token
+  for (const sig of launchSigs) {
+    let tx;
+    try {
+      tx = await rpc("getTransaction", [sig, { maxSupportedTransactionVersion: 0, encoding: "jsonParsed" }]);
+    } catch { continue; }
+    if (!tx || !tx.meta) continue;
+    const pre = tx.meta.preTokenBalances || [];
+    const post = tx.meta.postTokenBalances || [];
+    for (const pb of post) {
+      if (pb.mint !== MINT || !pb.owner) continue;
+      const preMatch = pre.find((x) => x.accountIndex === pb.accountIndex);
+      const postAmt = BigInt(pb.uiTokenAmount?.amount || 0);
+      const preAmt = BigInt(preMatch?.uiTokenAmount?.amount || 0);
+      if (postAmt > preAmt) {
+        const slot = tx.slot;
+        if (!owners.has(pb.owner) || slot < owners.get(pb.owner)) owners.set(pb.owner, slot);
+      }
+    }
+  }
+
+  const blocked = excludedSet();
+  const candidates = [...owners.entries()]
+    .map(([owner, slot]) => ({ owner, slot, alreadyExcluded: blocked.has(owner) }))
+    .sort((a, b) => a.slot - b.slot);
+  return {
+    candidates,
+    minSlot,
+    windowSlots: WINDOW,
+    txScanned: launchSigs.length,
+    reachedStart,
+    note: reachedStart
+      ? "Wallets that received $MOOLANA in the launch slots. Review before excluding — cross-check trench.bot."
+      : "Heads up: this coin has too much history to reach the exact launch block reliably. Treat these as partial — use trench.bot for the authoritative bundle map.",
+  };
+}
+
+app.get("/api/bundle-scan", async (_req, res) => {
+  try {
+    if (!HELIUS_KEY) {
+      return res.status(400).json({
+        error: "Bundle scan needs a real RPC. Add HELIUS_API_KEY in Railway variables (public RPC blocks/limits this).",
+      });
+    }
+    res.json(await bundleScan());
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }

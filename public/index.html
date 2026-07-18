@@ -192,6 +192,32 @@
     <p class="note">These are token accounts (largest 20 from the RPC). LP pools and CEX wallets appear here too — cross-check before reading it as one person's bag.</p>
   </section>
 
+  <section id="exclusions">
+    <div class="eyebrow">Fair airdrop</div>
+    <h2>Exclude bundle wallets</h2>
+    <p class="note" style="margin-top:0;margin-bottom:16px">
+      Wallets listed here are skipped in every <b>CSV export</b> and in the loyalty count of <b>Compare vs now</b>,
+      so bundle/dev/LP/CEX wallets don't eat rewards meant for real holders. Snapshots stay untouched — this list
+      only changes who lands in the airdrop file, and you can edit it anytime.
+    </p>
+    <div class="controls" style="align-items:flex-start">
+      <textarea id="blocklist" rows="6" placeholder="One wallet address per line…&#10;7xKq...bundle1&#10;9aFz...dev2"
+        style="flex:1;min-width:280px;background:var(--stall);border:1px solid var(--line);color:var(--milk);border-radius:10px;padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:.8rem;resize:vertical"></textarea>
+    </div>
+    <div class="controls">
+      <button id="saveBlock">💾 Save blocklist</button>
+      <button class="ghost" id="scanBundle">🔍 Auto-detect launch bundle</button>
+      <span id="blockCount" style="color:var(--milk-dim);font-size:.8rem"></span>
+    </div>
+    <div class="status" id="blockStatus"></div>
+    <div id="bundleResults"></div>
+    <p class="note">
+      <b>Where to get the addresses:</b> pump.fun shows the bundled %, and <b>trench.bot</b> maps the exact bundle wallets —
+      copy them in here. The auto-detect button finds wallets that bought in the launch slots (best-effort, needs your
+      HELIUS key); always eyeball the results before adding — an early real buyer can look like a sniper.
+    </p>
+  </section>
+
   <section id="snapshots">
     <div class="eyebrow">Airdrop ops</div>
     <h2>Holder snapshots</h2>
@@ -301,8 +327,9 @@ async function compareSnap(id, btn){
     if(d.error) throw new Error(d.error);
     $("snapStatus").className = "status ok";
     $("snapStatus").textContent =
-      `Since ${new Date(d.takenAt).toLocaleString()}: ${d.stillHoldingCount} still holding (diamond udders 💎), ` +
-      `${d.exitedCount} exited, ${d.newHolderCount} new wallets joined the herd.`;
+      `Since ${new Date(d.takenAt).toLocaleString()}: ${d.stillHoldingCount} loyal holders (diamond udders 💎), ` +
+      `${d.exitedCount} exited, ${d.newHolderCount} new wallets joined` +
+      (d.excludedFromLoyal ? ` — ${d.excludedFromLoyal} bundle/blocklisted wallets skipped.` : ".");
   }catch(e){
     $("snapStatus").className = "status err";
     $("snapStatus").textContent = "Compare failed: " + e.message;
@@ -331,7 +358,90 @@ $("takeSnap").addEventListener("click", async () => {
 
 $("refreshSnaps").addEventListener("click", listSnaps);
 
-loadConfig().then(() => { loadTokenomics(); listSnaps(); });
+// ---------- blocklist / bundle exclusion ----------
+async function loadBlocklist(){
+  try{
+    const d = await (await fetch("/api/excluded")).json();
+    $("blocklist").value = (d.wallets || []).join("\n");
+    updateBlockCount(d.wallets ? d.wallets.length : 0);
+  }catch{ /* leave empty */ }
+}
+function updateBlockCount(n){
+  $("blockCount").textContent = n ? `${n} wallet${n===1?"":"s"} excluded` : "no wallets excluded yet";
+}
+function linesFrom(text){
+  return text.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+}
+
+$("saveBlock").addEventListener("click", async () => {
+  const b = $("saveBlock"); b.disabled = true;
+  const wallets = linesFrom($("blocklist").value);
+  try{
+    const d = await (await fetch("/api/excluded", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ wallets })
+    })).json();
+    $("blocklist").value = (d.wallets || []).join("\n");
+    updateBlockCount(d.count);
+    $("blockStatus").className = "status ok";
+    $("blockStatus").textContent = `Saved. ${d.count} wallet${d.count===1?"":"s"} will be skipped in exports & loyalty counts.`;
+  }catch(e){
+    $("blockStatus").className = "status err";
+    $("blockStatus").textContent = "Save failed: " + e.message;
+  }
+  b.disabled = false;
+});
+
+$("scanBundle").addEventListener("click", async () => {
+  const b = $("scanBundle"); b.disabled = true; b.textContent = "Scanning launch…";
+  $("blockStatus").className = "status";
+  $("blockStatus").textContent = "Reading the token's earliest blocks…";
+  $("bundleResults").innerHTML = "";
+  try{
+    const d = await (await fetch("/api/bundle-scan")).json();
+    if(d.error) throw new Error(d.error);
+    const cands = d.candidates || [];
+    if(!cands.length){
+      $("blockStatus").className = "status";
+      $("blockStatus").textContent = "No launch-window wallets found. " + (d.note || "");
+    } else {
+      $("blockStatus").className = "status ok";
+      $("blockStatus").textContent = `Found ${cands.length} launch-window wallet${cands.length===1?"":"s"}. ${d.note||""}`;
+      const rows = cands.map((c,i) => `
+        <label class="snap" style="cursor:pointer">
+          <div style="display:flex;align-items:center;gap:12px">
+            <input type="checkbox" class="bcand" value="${c.owner}" ${c.alreadyExcluded ? "checked disabled" : "checked"} style="width:18px;height:18px;accent-color:var(--sol-green)">
+            <div>
+              <div class="when">${c.owner}</div>
+              <div style="color:var(--milk-dim);font-size:.75rem">slot ${c.slot}${c.alreadyExcluded ? " · already excluded" : ""}</div>
+            </div>
+          </div>
+        </label>`).join("");
+      $("bundleResults").innerHTML =
+        `<div class="snaplist" style="margin-top:14px">${rows}</div>` +
+        `<div class="controls" style="margin-top:12px"><button id="addBundle">➕ Add checked to blocklist</button></div>`;
+      $("addBundle").addEventListener("click", async () => {
+        const picked = [...document.querySelectorAll(".bcand:checked:not(:disabled)")].map(x => x.value);
+        if(!picked.length){ $("blockStatus").textContent = "Nothing new checked to add."; return; }
+        const r = await (await fetch("/api/excluded/add", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ wallets: picked })
+        })).json();
+        $("blocklist").value = (r.wallets || []).join("\n");
+        updateBlockCount(r.count);
+        $("blockStatus").className = "status ok";
+        $("blockStatus").textContent = `Added ${picked.length} wallet${picked.length===1?"":"s"}. Blocklist now ${r.count}.`;
+        $("bundleResults").innerHTML = "";
+      });
+    }
+  }catch(e){
+    $("blockStatus").className = "status err";
+    $("blockStatus").textContent = "Bundle scan failed: " + e.message;
+  }
+  b.disabled = false; b.textContent = "🔍 Auto-detect launch bundle";
+});
+
+loadConfig().then(() => { loadTokenomics(); listSnaps(); loadBlocklist(); });
 setInterval(loadTokenomics, 60000);
 </script>
 </body>

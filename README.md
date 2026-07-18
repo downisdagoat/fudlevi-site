@@ -31,11 +31,18 @@ HELIUS_API_KEY=your_key npm start
 # open http://localhost:3000
 ```
 
+## Excluding bundle / dev / LP wallets
+Use the **Exclude bundle wallets** panel to keep snipers and pools out of the airdrop:
+- Paste addresses into the blocklist (one per line) and **Save** — they're skipped in every CSV export and in the loyalty count of *Compare vs now*. Snapshots themselves stay a raw record, so the list can change anytime.
+- **Auto-detect launch bundle** scans the token's earliest slots for wallets that bought at launch and lets you tick which to add. Best-effort (needs `HELIUS_API_KEY`), not a full indexer — cross-check against **trench.bot** / pump.fun's bundled % for the authoritative map.
+
+API: `GET/POST /api/excluded`, `POST /api/excluded/add`, `GET /api/bundle-scan`. CSV honors the blocklist by default; add `?raw=1` to export everyone.
+
 ## Airdrop workflow
 1. Take a snapshot **before** announcing anything (quiet snapshots stop farm-and-dump).
-2. Set your min balance (e.g. 1000) and Export CSV — that's your send list.
-3. Later, hit **Compare vs now** — wallets still holding are your loyalty tier for bonus allocations.
-4. Manually remove known LP pools, CEX wallets, and the bundled cluster from the CSV before sending.
+2. Build your blocklist (auto-detect the launch bundle, add known LP/CEX wallets).
+3. Set your min balance (e.g. 1000) and Export CSV — bundle wallets are already filtered out; that's your send list.
+4. Later, hit **Compare vs now** — wallets still holding (minus the blocklist) are your loyalty tier for bonus allocations.
 
 ## Notes
 - Snapshot scan time scales with holder count; thousands of holders can take a minute+.
