@@ -36,11 +36,12 @@ HELIUS_API_KEY=your_key npm start
 Snapshots, the blocklist, CSV exports, and the bundle scan are locked behind `ADMIN_PASSWORD` — enforced server-side on every endpoint, so it's real access control, not just a hidden button. Live tokenomics and top holders stay public (that's on-chain data anyway). Click **🔒 Admin** on the page, enter the password, and it's remembered on that device until you log out. If `ADMIN_PASSWORD` isn't set, admin actions are denied for everyone (fail-closed). Auth API: `POST /api/auth`.
 
 ## Excluding bundle / dev / LP wallets
-Use the **Exclude bundle wallets** panel to keep snipers and pools out of the airdrop:
+Use the **Excluded bundle wallets** panel to keep snipers and pools out of the airdrop:
+- The excluded list is shown **publicly** (read-only) so holders can verify the drop is fair — the herd sees exactly which wallets were cut. **Editing is admin-only.**
 - Paste addresses into the blocklist (one per line) and **Save** — they're skipped in every CSV export and in the loyalty count of *Compare vs now*. Snapshots themselves stay a raw record, so the list can change anytime.
 - **Auto-detect launch bundle** scans the token's earliest slots for wallets that bought at launch and lets you tick which to add. Best-effort (needs `HELIUS_API_KEY`), not a full indexer — cross-check against **trench.bot** / pump.fun's bundled % for the authoritative map.
 
-API: `GET/POST /api/excluded`, `POST /api/excluded/add`, `GET /api/bundle-scan`. CSV honors the blocklist by default; add `?raw=1` to export everyone.
+API: `GET /api/excluded` is **public** (read); `POST /api/excluded` + `POST /api/excluded/add` + `GET /api/bundle-scan` require admin. CSV honors the blocklist by default; add `?raw=1` to export everyone.
 
 ## Airdrop workflow
 1. Take a snapshot **before** announcing anything (quiet snapshots stop farm-and-dump).

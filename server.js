@@ -331,7 +331,8 @@ app.get("/api/snapshots/:id/compare", requireAuth, async (req, res) => {
 });
 
 // ---------- exclusion blocklist API ----------
-app.get("/api/excluded", requireAuth, (_req, res) => {
+// Public read: anyone can see which wallets are cut from the airdrop (transparency). Editing stays admin-only.
+app.get("/api/excluded", (_req, res) => {
   res.json({ wallets: loadExcluded() });
 });
 

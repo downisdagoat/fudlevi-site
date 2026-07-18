@@ -225,29 +225,39 @@
   </section>
 
   <section id="exclusions">
-    <div class="eyebrow">Fair airdrop</div>
-    <h2>Exclude bundle wallets</h2>
-    <p class="note" style="margin-top:0;margin-bottom:16px">
-      Wallets listed here are skipped in every <b>CSV export</b> and in the loyalty count of <b>Compare vs now</b>,
-      so bundle/dev/LP/CEX wallets don't eat rewards meant for real holders. Snapshots stay untouched — this list
-      only changes who lands in the airdrop file, and you can edit it anytime.
+    <div class="eyebrow">Fair airdrop · public</div>
+    <h2>Excluded bundle wallets</h2>
+    <p class="note" style="margin-top:0;margin-bottom:18px">
+      These wallets are <b>cut from the $MOOLANA airdrop</b> — bundle/dev/LP/CEX wallets that shouldn't eat rewards
+      meant for real holders. The list is public so the herd can verify the drop is fair. <b>Anyone can view it; only
+      the admin can change it.</b>
     </p>
-    <div class="controls" style="align-items:flex-start">
-      <textarea id="blocklist" rows="6" placeholder="One wallet address per line…&#10;7xKq...bundle1&#10;9aFz...dev2"
-        style="flex:1;min-width:280px;background:var(--stall);border:1px solid var(--line);color:var(--milk);border-radius:10px;padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:.8rem;resize:vertical"></textarea>
+
+    <div id="excludedPublic"></div>
+
+    <div id="excludeAdmin" style="display:none;margin-top:22px;border-top:1px solid var(--line);padding-top:22px">
+      <div class="eyebrow" style="color:var(--sol-purple)">Admin · edit</div>
+      <div class="controls" style="align-items:flex-start">
+        <textarea id="blocklist" rows="6" placeholder="One wallet address per line…&#10;7xKq...bundle1&#10;9aFz...dev2"
+          style="flex:1;min-width:280px;background:var(--stall);border:1px solid var(--line);color:var(--milk);border-radius:10px;padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:.8rem;resize:vertical"></textarea>
+      </div>
+      <div class="controls">
+        <button id="saveBlock">💾 Save blocklist</button>
+        <button class="ghost" id="scanBundle">🔍 Auto-detect launch bundle</button>
+        <span id="blockCount" style="color:var(--milk-dim);font-size:.8rem"></span>
+      </div>
+      <div class="status" id="blockStatus"></div>
+      <div id="bundleResults"></div>
+      <p class="note">
+        <b>Where to get the addresses:</b> pump.fun shows the bundled %, and <b>trench.bot</b> maps the exact bundle wallets —
+        copy them in here. The auto-detect button finds wallets that bought in the launch slots (best-effort, needs your
+        HELIUS key); always eyeball the results before adding — an early real buyer can look like a sniper.
+      </p>
     </div>
-    <div class="controls">
-      <button id="saveBlock">💾 Save blocklist</button>
-      <button class="ghost" id="scanBundle">🔍 Auto-detect launch bundle</button>
-      <span id="blockCount" style="color:var(--milk-dim);font-size:.8rem"></span>
+
+    <div id="excludeLockedNote" class="locked-note" style="margin-top:18px">
+      🔒 The list above is public. To add or remove wallets, <button class="ghost" onclick="openLogin()">unlock admin</button>.
     </div>
-    <div class="status" id="blockStatus"></div>
-    <div id="bundleResults"></div>
-    <p class="note">
-      <b>Where to get the addresses:</b> pump.fun shows the bundled %, and <b>trench.bot</b> maps the exact bundle wallets —
-      copy them in here. The auto-detect button finds wallets that bought in the launch slots (best-effort, needs your
-      HELIUS key); always eyeball the results before adding — an early real buyer can look like a sniper.
-    </p>
   </section>
 
   <section id="snapshots">
@@ -302,18 +312,43 @@ function closeLogin(){ $("loginOverlay").classList.remove("show"); }
 function setUnlocked(v){
   unlocked = v;
   $("adminBtn").textContent = v ? "🔓 Admin · log out" : "🔒 Admin";
-  if(v){ listSnaps(); loadBlocklist(); }
-  else { renderLocked(); }
+  $("excludeAdmin").style.display = v ? "block" : "none";
+  $("excludeLockedNote").style.display = v ? "none" : "block";
+  if(!v){
+    $("excludeLockedNote").innerHTML = adminConfigured
+      ? `🔒 The list above is public. To add or remove wallets, <button class="ghost" onclick="openLogin()">unlock admin</button>.`
+      : `⚠️ Editing needs an <b>ADMIN_PASSWORD</b> set in your Railway variables.`;
+  }
+  if(v){ listSnaps(); }
+  else { renderSnapshotsLocked(); }
+  loadExcludedPublic();
 }
-function renderLocked(){
-  const msg = adminConfigured
-    ? `<div class="locked-note">🔒 Admin locked. Unlock to view and manage this.<br><button class="ghost" onclick="openLogin()">Unlock admin</button></div>`
+function renderSnapshotsLocked(){
+  $("snapList").innerHTML = adminConfigured
+    ? `<div class="locked-note">🔒 Admin locked. Unlock to take & view snapshots.<br><button class="ghost" onclick="openLogin()">Unlock admin</button></div>`
     : `<div class="locked-note">⚠️ No admin password set yet. Add <b>ADMIN_PASSWORD</b> in your Railway variables, then reload.</div>`;
-  $("snapList").innerHTML = msg;
-  $("bundleResults").innerHTML = "";
-  $("blocklist").value = "";
-  $("blocklist").placeholder = adminConfigured ? "Unlock admin to view / edit the blocklist" : "Set ADMIN_PASSWORD in Railway first";
-  updateBlockCount(0);
+}
+function walletRow(addr){
+  return `<div class="snap">
+    <div class="when" style="word-break:break-all">${addr}</div>
+    <div class="actions"><a class="ghost" style="text-decoration:none;padding:8px 14px;border:1px solid var(--line);border-radius:10px;font-size:.78rem;color:var(--milk)" href="https://solscan.io/account/${addr}" target="_blank" rel="noopener">Solscan ↗</a></div>
+  </div>`;
+}
+async function loadExcludedPublic(){
+  try{
+    const d = await (await fetch("/api/excluded")).json();
+    const w = d.wallets || [];
+    $("excludedPublic").innerHTML = w.length
+      ? `<div style="color:var(--milk-dim);font-size:.8rem;margin-bottom:10px">${w.length} wallet${w.length===1?"":"s"} excluded from the airdrop</div><div class="snaplist">${w.map(walletRow).join("")}</div>`
+      : `<div class="locked-note">No wallets excluded yet — the whole herd is eligible so far. 🐄</div>`;
+    if(unlocked){
+      $("blocklist").value = w.join("\n");
+      $("blocklist").placeholder = "One wallet address per line…";
+      updateBlockCount(w.length);
+    }
+  }catch{
+    $("excludedPublic").innerHTML = `<div class="locked-note">Couldn't load the exclusion list.</div>`;
+  }
 }
 
 async function loadConfig(){
@@ -413,7 +448,7 @@ async function loadTokenomics(){
 }
 
 async function listSnaps(){
-  if(!unlocked){ renderLocked(); return; }
+  if(!unlocked){ renderSnapshotsLocked(); return; }
   const r = await fetch("/api/snapshots", { headers: authHeaders() });
   if(r.status === 401 || r.status === 503){ setUnlocked(false); return; }
   const snaps = await r.json();
@@ -500,17 +535,6 @@ $("takeSnap").addEventListener("click", async () => {
 $("refreshSnaps").addEventListener("click", listSnaps);
 
 // ---------- blocklist / bundle exclusion ----------
-async function loadBlocklist(){
-  if(!unlocked){ return; }
-  try{
-    const r = await fetch("/api/excluded", { headers: authHeaders() });
-    if(r.status === 401 || r.status === 503){ setUnlocked(false); return; }
-    const d = await r.json();
-    $("blocklist").value = (d.wallets || []).join("\n");
-    $("blocklist").placeholder = "One wallet address per line…";
-    updateBlockCount(d.wallets ? d.wallets.length : 0);
-  }catch{ /* leave empty */ }
-}
 function updateBlockCount(n){
   $("blockCount").textContent = n ? `${n} wallet${n===1?"":"s"} excluded` : "no wallets excluded yet";
 }
@@ -531,8 +555,9 @@ $("saveBlock").addEventListener("click", async () => {
     const d = await r.json();
     $("blocklist").value = (d.wallets || []).join("\n");
     updateBlockCount(d.count);
+    loadExcludedPublic();
     $("blockStatus").className = "status ok";
-    $("blockStatus").textContent = `Saved. ${d.count} wallet${d.count===1?"":"s"} will be skipped in exports & loyalty counts.`;
+    $("blockStatus").textContent = `Saved. ${d.count} wallet${d.count===1?"":"s"} will be skipped in exports & loyalty counts, and shown publicly.`;
   }catch(e){
     $("blockStatus").className = "status err";
     $("blockStatus").textContent = "Save failed: " + e.message;
@@ -580,6 +605,7 @@ $("scanBundle").addEventListener("click", async () => {
         })).json();
         $("blocklist").value = (r.wallets || []).join("\n");
         updateBlockCount(r.count);
+        loadExcludedPublic();
         $("blockStatus").className = "status ok";
         $("blockStatus").textContent = `Added ${picked.length} wallet${picked.length===1?"":"s"}. Blocklist now ${r.count}.`;
         $("bundleResults").innerHTML = "";
