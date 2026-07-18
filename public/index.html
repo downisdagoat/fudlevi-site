@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MOOLANA HQ — Herd Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#0C141D;
+    --stall:#121E2B;
+    --milk:#F7F5F0;
+    --milk-dim:#9AA7B4;
+    --sol-purple:#9945FF;
+    --sol-green:#14F195;
+    --bear:#FF6B8A;
+    --line:#22303F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--night);
+    color:var(--milk);
+    font-family:'Space Grotesk',sans-serif;
+    min-height:100vh;
+  }
+  ::selection{background:var(--sol-green);color:var(--night)}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:20px 28px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:rgba(12,20,29,.92);backdrop-filter:blur(8px);z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:14px}
+  .cowmark{
+    width:44px;height:44px;border-radius:50%;
+    background:
+      radial-gradient(circle at 30% 30%, #000 0 18%, transparent 19%),
+      radial-gradient(circle at 72% 62%, #000 0 14%, transparent 15%),
+      linear-gradient(135deg,var(--sol-purple),var(--sol-green));
+    border:3px solid var(--milk);
+  }
+  h1{font-family:'Unbounded',sans-serif;font-weight:900;font-size:1.15rem;letter-spacing:.02em}
+  h1 span{background:linear-gradient(90deg,var(--sol-purple),var(--sol-green));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .ca{
+    font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--milk-dim);
+    cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 10px;
+    transition:border-color .15s;
+    max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .ca:hover{border-color:var(--sol-green)}
+  .ca:focus-visible{outline:2px solid var(--sol-green);outline-offset:2px}
+
+  main{max-width:1100px;margin:0 auto;padding:32px 24px 80px}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--sol-green);margin-bottom:10px;
+  }
+  section{margin-bottom:56px}
+  h2{font-family:'Unbounded',sans-serif;font-weight:700;font-size:1.5rem;margin-bottom:22px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  .card{
+    background:var(--stall);border:1px solid var(--line);border-radius:14px;padding:18px 20px;
+  }
+  .card .label{font-size:.75rem;color:var(--milk-dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+  .card .value{font-family:'Unbounded',sans-serif;font-weight:700;font-size:1.35rem;word-break:break-word}
+  .up{color:var(--sol-green)} .down{color:var(--bear)}
+
+  /* signature: the bucket gauge */
+  .bucket-wrap{display:flex;align-items:center;gap:26px;background:var(--stall);border:1px solid var(--line);border-radius:14px;padding:22px;margin-top:14px;flex-wrap:wrap}
+  .bucket{
+    width:88px;height:96px;flex:none;position:relative;
+    clip-path:polygon(8% 0,92% 0,82% 100%,18% 100%);
+    background:#1B2836;border:1px solid var(--line);overflow:hidden;
+  }
+  .bucket .fill{
+    position:absolute;left:0;right:0;bottom:0;height:0%;
+    background:linear-gradient(180deg,#fff, #E9E4DA);
+    transition:height 1.2s cubic-bezier(.2,.8,.2,1);
+  }
+  .bucket .fill::before{
+    content:"";position:absolute;top:-6px;left:0;right:0;height:8px;
+    background:radial-gradient(ellipse at 30% 50%, #fff 40%, transparent 60%),
+               radial-gradient(ellipse at 70% 50%, #fff 40%, transparent 60%);
+  }
+  .bucket-meta .big{font-family:'Unbounded',sans-serif;font-weight:900;font-size:2rem}
+  .bucket-meta p{color:var(--milk-dim);font-size:.85rem;max-width:420px;margin-top:6px}
+
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th{
+    text-align:left;color:var(--milk-dim);font-weight:500;text-transform:uppercase;
+    letter-spacing:.1em;font-size:.68rem;padding:10px 12px;border-bottom:1px solid var(--line);
+  }
+  td{padding:10px 12px;border-bottom:1px solid var(--line);font-family:'IBM Plex Mono',monospace}
+  td.rank{color:var(--milk-dim);width:44px}
+  tr:hover td{background:rgba(20,241,149,.04)}
+  .addr{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pctbar{position:relative;background:#1B2836;border-radius:4px;height:8px;min-width:90px;overflow:hidden}
+  .pctbar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--sol-purple),var(--sol-green));border-radius:4px}
+
+  .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  button{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.9rem;
+    background:linear-gradient(90deg,var(--sol-purple),var(--sol-green));
+    color:var(--night);border:none;border-radius:10px;padding:12px 20px;cursor:pointer;
+    transition:transform .12s, opacity .12s;
+  }
+  button:hover{transform:translateY(-1px)}
+  button:disabled{opacity:.5;cursor:wait;transform:none}
+  button.ghost{background:transparent;color:var(--milk);border:1px solid var(--line)}
+  button.ghost:hover{border-color:var(--sol-green)}
+  button:focus-visible{outline:2px solid var(--sol-green);outline-offset:2px}
+  input[type=number]{
+    background:var(--stall);border:1px solid var(--line);color:var(--milk);
+    border-radius:10px;padding:11px 14px;font-family:'IBM Plex Mono',monospace;width:150px;
+  }
+  input:focus-visible{outline:2px solid var(--sol-green);outline-offset:2px}
+
+  .snaplist{display:flex;flex-direction:column;gap:10px}
+  .snap{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    background:var(--stall);border:1px solid var(--line);border-radius:12px;padding:14px 18px;
+  }
+  .snap .when{font-family:'IBM Plex Mono',monospace;font-size:.8rem}
+  .snap .count{color:var(--sol-green);font-weight:700}
+  .snap .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .snap .actions button{padding:8px 14px;font-size:.78rem}
+
+  .status{
+    font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--milk-dim);
+    padding:10px 0;min-height:34px;
+  }
+  .status.err{color:var(--bear)}
+  .status.ok{color:var(--sol-green)}
+
+  .note{color:var(--milk-dim);font-size:.82rem;line-height:1.55;border-left:3px solid var(--sol-purple);padding-left:14px;margin-top:14px}
+
+  footer{
+    text-align:center;color:var(--milk-dim);font-size:.75rem;padding:26px;
+    border-top:1px solid var(--line);font-family:'IBM Plex Mono',monospace;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none!important}
+  }
+  @media(max-width:640px){
+    header{flex-direction:column;align-items:flex-start}
+    .ca{max-width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="cowmark" aria-hidden="true"></div>
+    <h1>MOOLANA <span>HQ</span></h1>
+  </div>
+  <div class="ca" id="ca" role="button" tabindex="0" title="Copy contract address">Loading CA…</div>
+</header>
+
+<main>
+  <section id="tokenomics">
+    <div class="eyebrow">On-chain · live</div>
+    <h2>Tokenomics</h2>
+    <div class="grid" id="statGrid">
+      <div class="card"><div class="label">Price</div><div class="value" id="price">—</div></div>
+      <div class="card"><div class="label">Market cap</div><div class="value" id="mcap">—</div></div>
+      <div class="card"><div class="label">Liquidity</div><div class="value" id="liq">—</div></div>
+      <div class="card"><div class="label">24h volume</div><div class="value" id="vol">—</div></div>
+      <div class="card"><div class="label">24h change</div><div class="value" id="chg">—</div></div>
+      <div class="card"><div class="label">Total supply</div><div class="value" id="supply">—</div></div>
+    </div>
+
+    <div class="bucket-wrap">
+      <div class="bucket" aria-hidden="true"><div class="fill" id="bucketFill"></div></div>
+      <div class="bucket-meta">
+        <div class="big" id="top10">—%</div>
+        <p>of supply sits in the top 10 wallets. A fuller bucket means heavier concentration — the herd wants this LOW. Watch it after every big move.</p>
+      </div>
+    </div>
+    <div class="status" id="tokStatus"></div>
+  </section>
+
+  <section id="holders">
+    <div class="eyebrow">Largest stalls</div>
+    <h2>Top holders</h2>
+    <table aria-label="Top token holders">
+      <thead><tr><th>#</th><th>Token account</th><th>Balance</th><th>% supply</th><th></th></tr></thead>
+      <tbody id="holderRows"><tr><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+    <p class="note">These are token accounts (largest 20 from the RPC). LP pools and CEX wallets appear here too — cross-check before reading it as one person's bag.</p>
+  </section>
+
+  <section id="snapshots">
+    <div class="eyebrow">Airdrop ops</div>
+    <h2>Holder snapshots</h2>
+    <div class="controls">
+      <button id="takeSnap">📸 Take snapshot now</button>
+      <label for="minBal" style="color:var(--milk-dim);font-size:.8rem">Min balance for export:</label>
+      <input type="number" id="minBal" value="0" min="0" step="any" />
+      <button class="ghost" id="refreshSnaps">Refresh list</button>
+    </div>
+    <div class="status" id="snapStatus"></div>
+    <div class="snaplist" id="snapList"></div>
+    <p class="note">
+      A snapshot scans every wallet holding $MOOLANA at this moment and stores it with a timestamp.
+      For the airdrop: take the snapshot QUIETLY, announce after. Use <b>Export CSV</b> (with your min-balance
+      filter) as the send list, and <b>Compare vs now</b> to see who diamond-handed since the snapshot —
+      wallets that held through are your loyalty tier.
+    </p>
+  </section>
+</main>
+
+<footer>MOOLANA HQ · the herd watches the chain · GET MILKED 🥛</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmtUsd = (n) => n == null ? "—" : "$" + (n >= 1e6 ? (n/1e6).toFixed(2)+"M" : n >= 1e3 ? (n/1e3).toFixed(1)+"K" : n.toFixed(n < 1 ? 6 : 2));
+const fmtNum = (n) => n == null ? "—" : n >= 1e9 ? (n/1e9).toFixed(2)+"B" : n >= 1e6 ? (n/1e6).toFixed(2)+"M" : n.toLocaleString();
+const short = (a) => a.slice(0,4) + "…" + a.slice(-4);
+
+let MINT = "";
+
+async function loadConfig(){
+  const c = await (await fetch("/api/config")).json();
+  MINT = c.mint;
+  $("ca").textContent = "CA: " + MINT;
+}
+$("ca").addEventListener("click", () => {
+  navigator.clipboard.writeText(MINT);
+  $("ca").textContent = "Copied ✓";
+  setTimeout(() => $("ca").textContent = "CA: " + MINT, 1200);
+});
+$("ca").addEventListener("keydown", (e) => { if(e.key==="Enter") $("ca").click(); });
+
+async function loadTokenomics(){
+  $("tokStatus").textContent = "Fetching on-chain data…";
+  $("tokStatus").className = "status";
+  try{
+    const r = await fetch("/api/tokenomics");
+    const d = await r.json();
+    if(d.error) throw new Error(d.error);
+    const m = d.market || {};
+    $("price").textContent = m.priceUsd ? "$" + Number(m.priceUsd).toPrecision(4) : "—";
+    $("mcap").textContent = fmtUsd(m.marketCap);
+    $("liq").textContent = fmtUsd(m.liquidityUsd);
+    $("vol").textContent = fmtUsd(m.volume24h);
+    const chg = m.priceChange24h;
+    $("chg").textContent = chg == null ? "—" : (chg >= 0 ? "+" : "") + chg + "%";
+    $("chg").className = "value " + (chg >= 0 ? "up" : "down");
+    $("supply").textContent = fmtNum(d.supply.uiAmount);
+    $("top10").textContent = d.top10pct.toFixed(1) + "%";
+    $("bucketFill").style.height = Math.min(100, d.top10pct) + "%";
+
+    const rows = d.topHolders.map((h,i) => `
+      <tr>
+        <td class="rank">${i+1}</td>
+        <td class="addr" title="${h.tokenAccount}">${short(h.tokenAccount)}</td>
+        <td>${fmtNum(h.uiAmount)}</td>
+        <td>${h.pct.toFixed(2)}%</td>
+        <td><div class="pctbar"><i style="width:${Math.min(100,h.pct*2)}%"></i></div></td>
+      </tr>`).join("");
+    $("holderRows").innerHTML = rows || `<tr><td colspan="5">No holder data returned.</td></tr>`;
+    $("tokStatus").textContent = "Updated " + new Date().toLocaleTimeString();
+    $("tokStatus").className = "status ok";
+  }catch(e){
+    $("tokStatus").textContent = "Error: " + e.message + " — public RPCs rate-limit; add a HELIUS_API_KEY in Railway variables for reliability.";
+    $("tokStatus").className = "status err";
+  }
+}
+
+async function listSnaps(){
+  const snaps = await (await fetch("/api/snapshots")).json();
+  if(!snaps.length){
+    $("snapList").innerHTML = `<div class="snap"><span style="color:var(--milk-dim)">No snapshots yet. Take one before you announce anything — the herd rewards receipts.</span></div>`;
+    return;
+  }
+  $("snapList").innerHTML = snaps.map(s => `
+    <div class="snap">
+      <div>
+        <div class="when">${new Date(s.takenAt).toLocaleString()}</div>
+        <div><span class="count">${s.holderCount.toLocaleString()}</span> holders</div>
+      </div>
+      <div class="actions">
+        <button class="ghost" onclick="exportCsv('${s.id}')">Export CSV</button>
+        <button class="ghost" onclick="compareSnap('${s.id}', this)">Compare vs now</button>
+      </div>
+    </div>`).join("");
+}
+
+function exportCsv(id){
+  const min = Number($("minBal").value || 0);
+  window.location = `/api/snapshots/${id}/csv` + (min ? `?min=${min}` : "");
+}
+
+async function compareSnap(id, btn){
+  btn.disabled = true; btn.textContent = "Scanning…";
+  try{
+    const d = await (await fetch(`/api/snapshots/${id}/compare`)).json();
+    if(d.error) throw new Error(d.error);
+    $("snapStatus").className = "status ok";
+    $("snapStatus").textContent =
+      `Since ${new Date(d.takenAt).toLocaleString()}: ${d.stillHoldingCount} still holding (diamond udders 💎), ` +
+      `${d.exitedCount} exited, ${d.newHolderCount} new wallets joined the herd.`;
+  }catch(e){
+    $("snapStatus").className = "status err";
+    $("snapStatus").textContent = "Compare failed: " + e.message;
+  }
+  btn.disabled = false; btn.textContent = "Compare vs now";
+}
+
+$("takeSnap").addEventListener("click", async () => {
+  const b = $("takeSnap");
+  b.disabled = true; b.textContent = "Scanning the herd…";
+  $("snapStatus").className = "status";
+  $("snapStatus").textContent = "Scanning every holder wallet — this can take a minute on big holder counts…";
+  try{
+    const r = await fetch("/api/snapshot", { method:"POST" });
+    const d = await r.json();
+    if(d.error) throw new Error(d.error);
+    $("snapStatus").className = "status ok";
+    $("snapStatus").textContent = `Snapshot saved: ${d.holderCount.toLocaleString()} holders captured in ${(d.scanMs/1000).toFixed(1)}s.`;
+    listSnaps();
+  }catch(e){
+    $("snapStatus").className = "status err";
+    $("snapStatus").textContent = "Snapshot failed: " + e.message + (e.message.includes("410") || e.message.toLowerCase().includes("disabled") ? " — the public RPC blocks full scans; add HELIUS_API_KEY in Railway variables." : "");
+  }
+  b.disabled = false; b.textContent = "📸 Take snapshot now";
+});
+
+$("refreshSnaps").addEventListener("click", listSnaps);
+
+loadConfig().then(() => { loadTokenomics(); listSnaps(); });
+setInterval(loadTokenomics, 60000);
+</script>
+</body>
+</html>

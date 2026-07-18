@@ -1,12 +1,15 @@
 {
-  "name": "fudlevi-site",
+  "name": "moolana-hq",
   "version": "1.0.0",
-  "description": "FUDLEVI ($FUDLEVI) memecoin website",
+  "description": "$MOOLANA tokenomics dashboard + holder snapshot tool for airdrops",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
   }
 }
